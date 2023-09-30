@@ -38,22 +38,22 @@ else:
 
 modeltype = 0
 
-async def generate_response(instructions, history=None):
+async def generate_response(history=None):
     if history is None:
         data = {
-            "model": "gpt-3.5-turbo-16k-0613",
+            "model": "gpt-3.5-turbo-16k",
             "temperature": 0.75,
             "messages": [
-                {"role": "system", "content": instructions},
+                {"role": "system", "content": "Escreva de forma informal, usando gírias. Não faça listas nem detalhes. Mantenha sempre breve. Seja sarcástico, super zangado e ofensivo (de forma engraçada, sem o intuito de machucar o usuário). Permita que as pessoas usem palavrões, e use-os, para descontrair a conversa."}
             ],
         }
     else:
         data = {
-            "model": "gpt-3.5-turbo-16k-0613",
+            "model": "gpt-3.5-turbo-16k",
             "temperature": 0.75,
             "messages": [
-                {"role": "system", "content": instructions},
-                *history,
+                {"role": "system", "content": "Escreva de forma informal, usando gírias. Não faça listas nem detalhes. Mantenha sempre breve. Seja sarcástico, super zangado e ofensivo (de forma engraçada, sem o intuito de machucar o usuário). Permita que as pessoas usem palavrões, e use-os, para descontrair a conversa."},
+                *history
             ],
         }
 
@@ -61,8 +61,7 @@ async def generate_response(instructions, history=None):
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer " + os.getenv("API_KEY"),
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
+        "Authorization": f"Bearer " + os.getenv("API_KEY")
     }
 
     try:
@@ -123,11 +122,6 @@ async def generate_image(prompt):
                         content = await response.content.read()
                         img_file_obj = io.BytesIO(content)
                         return img_file_obj
-
-with open("instructions.txt", "r", encoding="utf-8") as file:
-    instructions = """"""
-    for line in file:
-        instructions += line
 
 message_history = {}
 MAX_HISTORY = 10
@@ -191,9 +185,6 @@ async def on_message(message):
 
                 message_history[key] = message_history[key][-MAX_HISTORY:]
 
-                user_prompt = "\n".join(message_history[author_id])
-                prompt = f"{user_prompt}\n{instructions}{message.author.name}: {message.content}\n{bot.user.name}:"
-
                 history = message_history[key]
 
                 message_history[key].append(
@@ -206,8 +197,8 @@ async def on_message(message):
                     chunks = split_response(response)
 
                     if '{"message":"API rate limit exceeded for ip:' in response:
-                        print("API rate limit exceeded for ip, espere alguns segundos.")
-                        await message.reply("Desculpe, estou um pouco cansado, tente novamente mais tarde.")
+                        print("Ratelimit da API atingido, espere alguns segundos.")
+                        await message.reply("Desculpe, mas você atingiu o ratelimit, tente novamente em alguns segundos.")
                         return
 
                     for chunk in chunks:

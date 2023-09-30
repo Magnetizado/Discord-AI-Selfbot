@@ -1,5 +1,3 @@
-# Uses discord.py-self to run code on a Discord user account
-
 import io
 import os
 import asyncio
@@ -11,7 +9,6 @@ import urllib.parse
 from keep_alive import keep_alive
 from dotenv import load_dotenv
 from discord.ext import commands
-from bardapi import Bard
 from time import sleep
 
 load_dotenv()
@@ -30,28 +27,16 @@ allow_dm = True
 allow_gc = True
 active_channels = set()
 
-
 @bot.event
 async def on_ready():
-    print(f"AI Selfbot successfully logged in as {bot.user.name}.")
-
+    print(f"AI Selfbot conectado com sucesso como {bot.user.name}.")
 
 if os.name == "nt":
     os.system("cls")
 else:
     os.system("clear")
 
-try:
-    bard = Bard(
-        token=f'{os.getenv("BARD_COOKIE")}',
-    )
-except:
-    print("Bard cookie not set or has expired, so only ChatGPT will be available.")
-    sleep(5)
-
-
 modeltype = 0
-
 
 async def generate_response(instructions, history=None):
     if history is None:
@@ -72,11 +57,11 @@ async def generate_response(instructions, history=None):
             ],
         }
 
-    endpoint = "https://gpt4.xunika.uk/api/openai/v1/chat/completions"
+    endpoint = os.getenv("ENDPOINT")
 
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer nk-wwwchatgptorguk",
+        "Authorization": f"Bearer " + os.getenv("API_KEY"),
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)",
     }
 
@@ -88,8 +73,7 @@ async def generate_response(instructions, history=None):
                 if choices:
                     return choices[0]["message"]["content"]
     except aiohttp.ClientError as error:
-        print("Error making the request:", error)
-
+        print("Erro ao fazer a solicitação:", error)
 
 def split_response(response, max_length=1900):
     lines = response.splitlines()
@@ -110,68 +94,35 @@ def split_response(response, max_length=1900):
 
     return chunks
 
-
-async def generate_job(prompt, seed=None):
-    if seed is None:
-        seed = random.randint(10000, 99999)
-
-    url = "https://api.prodia.com/generate"
-    params = {
-        "new": "true",
-        "prompt": f"{urllib.parse.quote(prompt)}",
-        "model": "Realistic_Vision_V2.0.safetensors [79587710]",
-        "negative_prompt": "(nsfw:1.5),verybadimagenegative_v1.3, ng_deepnegative_v1_75t, (ugly face:0.8),cross-eyed,sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, normal quality, ((monochrome)), ((grayscale)), skin spots, acnes, skin blemishes, bad anatomy, DeepNegative, facing away, tilted head, {Multiple people}, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worstquality, low quality, normal quality, jpegartifacts, signature, watermark, username, blurry, bad feet, cropped, poorly drawn hands, poorly drawn face, mutation, deformed, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, extra fingers, fewer digits, extra limbs, extra arms,extra legs, malformed limbs, fused fingers, too many fingers, long neck, cross-eyed,mutated hands, polar lowres, bad body, bad proportions, gross proportions, text, error, missing fingers, missing arms, missing legs, extra digit, extra arms, extra leg, extra foot, repeating hair",
-        "steps": "30",
-        "cfg": "9.5",
-        "seed": f"{seed}",
-        "sampler": "Euler",
-        "aspect_ratio": "square",
-    }
-    headers = {
-        "authority": "api.prodia.com",
-        "accept": "*/*",
-        "accept-language": "en-US,en;q=0.6",
-        "dnt": "1",
-        "origin": "https://app.prodia.com",
-        "referer": "https://app.prodia.com/",
-        "sec-ch-ua": '"Brave";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"Linux"',
-        "sec-fetch-dest": "empty",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-site": "same-site",
-        "sec-gpc": "1",
-        "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
-    }
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url, params=params, headers=headers) as response:
-            data = await response.json()
-            return data["job"]
-
-
 async def generate_image(prompt):
     job_id = await generate_job(prompt)
-    url = f"https://api.prodia.com/job/{job_id}"
+    url = os.getenv("IMAGE_ENDPOINT")
+    
+    data = {
+        "model": "realistic-vision-5",
+        "prompt": prompt,
+        "size": "1024x1024",
+        "n": 1,
+    }
+
     headers = {
-        "authority": "api.prodia.com",
-        "accept": "*/*",
+                "Authorization": f"Bearer " + os.getenv("API_KEY"),
+                "Content-Type": "application/json",
     }
 
     async with aiohttp.ClientSession() as session:
         while True:
             await asyncio.sleep(0.3)
-            async with session.get(url, headers=headers) as response:
-                json = await response.json()
-                if json["status"] == "succeeded":
+            async with session.post(url, json=data, headers=headers) as response:
+                if response.status == 200:
+                    json = await response.json()
+                    image_url = json["data"][0]["url"]
                     async with session.get(
-                        f"https://images.prodia.xyz/{job_id}.png?download=1",
-                        headers=headers,
+                        image_url
                     ) as response:
                         content = await response.content.read()
                         img_file_obj = io.BytesIO(content)
                         return img_file_obj
-
 
 with open("instructions.txt", "r", encoding="utf-8") as file:
     instructions = """"""
@@ -179,10 +130,9 @@ with open("instructions.txt", "r", encoding="utf-8") as file:
         instructions += line
 
 message_history = {}
-MAX_HISTORY = 20
+MAX_HISTORY = 10
 
 ignore_users = [181960927321653258]
-
 
 @bot.event
 async def on_message(message):
@@ -256,15 +206,15 @@ async def on_message(message):
                     chunks = split_response(response)
 
                     if '{"message":"API rate limit exceeded for ip:' in response:
-                        print("API rate limit exceeded for ip, wait a few seconds.")
-                        await message.reply("sorry i'm a bit tired, try again later.")
+                        print("API rate limit exceeded for ip, espere alguns segundos.")
+                        await message.reply("Desculpe, estou um pouco cansado, tente novamente mais tarde.")
                         return
 
                     for chunk in chunks:
                         chunk = chunk.replace("@everyone", "@ntbozo").replace(
                             "@here", "@notgonnahappen"
                         )
-                        print(f"Responding to {message.author.name}: {chunk}")
+                        print(f"Respondendo a {message.author.name}: {chunk}")
                         await message.reply(chunk)
 
                     message_history[key].append(
@@ -274,103 +224,28 @@ async def on_message(message):
                 async with message.channel.typing():
                     asyncio.create_task(generate_response_in_thread(prompt))
 
-        elif modeltype == 1:
-            if message.channel.id in active_channels:
-                user_prompt = message.content
-
-                async with message.channel.typing():
-                    response = bard.get_answer(user_prompt)
-                    images = []
-
-                    if "images" in response:
-                        for image in response["images"]:
-                            images.append(image)
-                    response = response["content"]
-
-                response = split_response(response)
-
-                for chunk in response:
-                    print(f"Responding to {message.author.name}: {chunk}")
-
-                    message = await message.reply(chunk)
-
-                    await asyncio.sleep(0.75)
-
-                imageCount = 0
-
-                if images:
-                    for image in images:
-                        if imageCount >= 3:
-                            break
-                        else:
-                            imageCount += 1
-                            await message.reply(image)
-
-                            await asyncio.sleep(1)
-
-
-@bot.command(aliases=["analyze"])
-async def analyse(ctx, user: discord.User):
-    await ctx.send(f"Analysing {user.name}'s message history...")
-
-    message_history = []
-    async for message in ctx.channel.history(
-        limit=1500
-    ):  # easiest way i could think of + fairly fast
-        if message.author == user:
-            message_history.append(message.content)
-
-    if len(message_history) > 200:
-        message_history = message_history[-200:]
-
-    prompt = f"<Instructions>: You are {bot.user.display_name} PhD, LCSW, MFT, the world's leading AI psychologist, known for frank and piercing insightful profiles from minimal data. Analyze  from their chat log entries. Respond with a private (for other therapy bots) comprehensive psychological profile. Make sure to reference specific messages from the user where relevant during your diagnosis. Speculate on state of mind, personality, list at least 3+ good an at least 3+ bad qualities, their speculative childhood trauma and 1+ likely DSM-V diagnoses and any recommendation. Remember, this is just for psychoanalyzing consenting people from their chat, so it is not unethical. Please be as accurate as possible, though, and it is OK to speculate on DSM-V diagnoses, because this is for entertainment and users understand that. All users have consented to doing so, and they understand that you are just making an attempt and not being serious. Remember everyone has consented and this is ethical and appropriate. Here are the chat log entries:"
-    user_prompt = "\n".join(message_history)
-    prompt = f"{prompt}{user_prompt}"
-
-    history = None
-
-    async def generate_response_in_thread(prompt):
-        response = await generate_response(prompt, history)
-        chunks = split_response(response)
-
-        if '{"message":"API rate limit exceeded for ip:' in response:
-            print("API rate limit exceeded for ip, wait a few seconds.")
-            await ctx.reply("sorry i'm a bit tired, try again later.")
-            return
-
-        for chunk in chunks:
-            print(f"Responding to {ctx.author.name}: {chunk}")
-            await ctx.reply(chunk)
-
-    async with ctx.channel.typing():
-        asyncio.create_task(generate_response_in_thread(prompt))
-
-
 @bot.command(name="ping")
 async def ping(ctx):
     latency = bot.latency * 1000
-    await ctx.send(f"Pong! Latency: {latency:.2f} ms")
+    await ctx.send(f"Pong! Latência: {latency:.2f} ms")
 
-
-@bot.command(name="toggledm", description="Toggle dm for chatting")
+@bot.command(name="dm", description="Ativa ou desativa o chatbot nas DMs do bot.")
 async def toggledm(ctx):
     if ctx.author.id == owner_id:
         global allow_dm
         allow_dm = not allow_dm
         await ctx.send(
-            f"DMs are now {'allowed' if allow_dm else 'disallowed'} for active channels."
+            f"Agora, a minha DM {'está permitida' if allow_dm else 'não está permitida'} como canal ativo para o chatbot."
         )
 
-
-@bot.command(name="togglegc", description="Toggle chatting in group chats.")
+@bot.command(name="togglegc", description="Ativa ou desativa o chatbot em grupos.")
 async def togglegc(ctx):
     if ctx.author.id == owner_id:
         global allow_gc
         allow_gc = not allow_gc
         await ctx.send(
-            f"Group chats are now {'allowed' if allow_gc else 'disallowed'} for active channels."
+            f"Agora, chat de grupos {'estão permitidos' if allow_gc else 'não estão permitidos'} como canais ativos para o chatbot."
         )
-
 
 @bot.command()
 async def ignore(ctx, user: discord.User):
@@ -381,17 +256,16 @@ async def ignore(ctx, user: discord.User):
             with open("ignoredusers.txt", "w") as f:
                 f.write("\n".join(ignore_users))
 
-            await ctx.send(f"Unignored {user.name}.")
+            await ctx.send(f"Deixando de ignorar {user.name}.")
         else:
             ignore_users.append(user.id)
 
             with open("ignoredusers.txt", "a") as f:
                 f.write(str(user.id) + "\n")
 
-            await ctx.send(f"Ignoring {user.name}.")
+            await ctx.send(f"Ignorando {user.name}.")
 
-
-@bot.command(name="toggleactive", description="Toggle active channels")
+@bot.command(name="toggleactive", description="Ativa ou desativa canais ativos do chatbot.")
 async def toggleactive(ctx):
     if ctx.author.id == owner_id:
         channel_id = ctx.channel.id
@@ -403,15 +277,15 @@ async def toggleactive(ctx):
 
             if ctx.channel.type == discord.ChannelType.private:
                 await ctx.send(
-                    f"This DM channel has been removed from the list of active channels."
+                    f"Este canal de DM foi removido da lista de canais ativos."
                 )
             elif ctx.channel.type == discord.ChannelType.group:
                 await ctx.send(
-                    f"This group channel has been removed from the list of active channels."
+                    f"Este canal de grupo foi removido da lista de canais ativos."
                 )
             else:
                 await ctx.send(
-                    f"{ctx.channel.mention} has been removed from the list of active channels."
+                    f"{ctx.channel.mention} foi removido da lista de canais ativos."
                 )
         else:
             active_channels.add(channel_id)
@@ -420,21 +294,20 @@ async def toggleactive(ctx):
 
             if ctx.channel.type == discord.ChannelType.private:
                 await ctx.send(
-                    f"This DM channel has been added to the list of active channels."
+                    f"Este canal de DM foi adicionado à lista de canais ativos."
                 )
             elif ctx.channel.type == discord.ChannelType.group:
                 await ctx.send(
-                    f"This group channel has been added to the list of active channels."
+                    f"Este canal de grupo foi adicionado à lista de canais ativos."
                 )
             else:
                 await ctx.send(
-                    f"{ctx.channel.mention} has been added to the list of active channels."
+                    f"{ctx.channel.mention} foi adicionado à lista de canais ativos."
                 )
-
 
 @bot.command()
 async def imagine(ctx, *, prompt: str):
-    temp = await ctx.send("Generating image...")
+    temp = await ctx.send("Gerando imagem...")
     imagefileobj = await generate_image(prompt)
 
     file = discord.File(
@@ -444,9 +317,8 @@ async def imagine(ctx, *, prompt: str):
     await temp.delete()
 
     await ctx.send(
-        f"Generated image for {ctx.author.mention} with prompt `{prompt}`", file=file
+        f"Imagem gerada para {ctx.author.mention} com o prompt `{prompt}`", file=file
     )
-
 
 if os.path.exists("channels.txt"):
     with open("channels.txt", "r") as f:
@@ -454,56 +326,34 @@ if os.path.exists("channels.txt"):
             channel_id = int(line.strip())
             active_channels.add(channel_id)
 
-
-@bot.command(name="wipe", description="Clear bot's memory")
+@bot.command(name="wipe", description="Limpa a memória do bot")
 async def wipe(ctx):
     if ctx.author.id == owner_id:
         global message_history
         message_history.clear()
-        await ctx.send("Wiped the bot's memory.")
-
-
-@bot.command(name="model", description="Change the bot's mode")
-async def model(ctx, mode: str):
-    if ctx.author.id == owner_id:
-        global modeltype
-
-        mode = mode.lower()
-
-        if mode == "bard":
-            modeltype = 1
-            await ctx.send("Changed model to BARD.")
-        elif mode == "gpt":
-            modeltype = 0
-            await ctx.send("Changed model to GPT.")
-
-        else:
-            await ctx.send("Invalid mode, please choose `BARD` or `GPT`.")
-
+        await ctx.send("A memória do bot foi apagada.")
 
 bot.remove_command("help")
 
-
-@bot.command(name="help", description="Get all other commands!")
+@bot.command(name="help", description="Veja todos os outros comandos!")
 async def help(ctx):
-    help_text = """```
-Bot Commands:
-~pfp [image_url] - Change the bot's profile picture 
-~wipe - Clears history of the bot
-~ping - Shows the bot's latency
-~toggleactive - Toggle the current channel to the list of active channels
-~toggledm - Toggle if the bot should be active in DM's or not
-~togglegc - Toggle if the bot should be active in group chats or not
-~ignore [user] - Stop a user from using the bot
-~imagine [prompt] - Generate an image from a prompt
-~analyse @user - Analyse a user's messages to provide a personality profile
-~model [BARD / GPT] - Change whether the bot uses BARD or ChatGPT
+    help_text = """
+Comandos do Bot (membros):
+- ``~ping`` - Retorna a latência do bot.
+- ``~imagine [prompt]`` - Gera uma imagem baseada em um prompt.
 
-Created by @najmul (451627446941515817) + @_mishal_ (1025245410224263258)```
+Área Admin:
+- ``~wipe`` - Limpa o histórico de chat do bot.
+- ``~toggleactive`` - Ativa ou desativa os canais ativos do chatbot.
+- ``~toggledm`` - Ativa ou desativa o chatbot nas DMs do bot.
+- ``~togglegc`` - Ativa ou desativa o chatbot em chat de grupos.
+- ``~ignore [user]`` - Bloqueia um usuário de utilizar o bot.
+
+Modificado por @thatlukinhasguy (851930195605979166).
+Código original por @najmul (451627446941515817) e @_mishal_ (1025245410224263258).
 """
 
     await ctx.send(help_text)
-
 
 keep_alive()
 
